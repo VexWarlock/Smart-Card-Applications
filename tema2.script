@@ -1,0 +1,347 @@
+#  transp.scr  -  Script de test pentru Transport Smart Card Wallet
+#
+#  Format APDU: CLA INS P1 P2 [Lc Data] [Le]
+#
+#  Constante:
+#    CLA = 80
+#    VERIFY      = 20  (PIN default: 01 02 03 04)
+#    CREDIT      = 30  (necesita PIN)
+#    DEBIT       = 40  (P1=transport 01=bus/02=tram, P2=persoane, DATA=zi+ora)
+#    GET_BALANCE = 50
+#    PASS        = 70  (P1=tip_abonament, P2=ziua_curenta)
+#    RESET_PIN   = 2C  (PUK: 09*8)
+#
+#  Zile: 1=luni, 2=marti, 3=miercuri, 4=joi, 5=vineri, 6=sambata, 7=duminica
+# --------------------------------------------------------------------------------
+
+# TEST 1: SELECT applet
+/output Test 1: SELECT applet
+# AID: A0 00 00 00 62 03 01 0C 06 01
+/card
+0x00 0xA4 0x04 0x00 0x0A 0xA0 0x00 0x00 0x00 0x62 0x03 0x01 0x0C 0x06 0x01 0x7F
+/check SW 9000
+/output -> SELECT OK
+
+# ---------------------------------------------------------------------------
+# TEST 2: GET_BALANCE initial (sold 0, fara abonament)
+/output Test 2: GET_BALANCE initial
+80 50 00 00 04
+/check SW 9000
+/check Rsp 00000000
+/output -> Balance=0 RON, SubType=0 (fara abonament), Trips=0
+
+# ---------------------------------------------------------------------------
+# TEST 3: CREDIT fara PIN => eroare 6301
+/output Test 3: CREDIT fara PIN (asteptat 6301)
+80 30 00 00 01 32
+/check SW 6301
+/output -> Corect: PIN necesar
+
+# ---------------------------------------------------------------------------
+# TEST 4: VERIFY PIN gresit => eroare 6300
+/output Test 4: VERIFY PIN gresit (asteptat 6300)
+80 20 00 00 04 FF FF FF FF
+/check SW 6300
+/output -> Corect: PIN gresit
+
+# ---------------------------------------------------------------------------
+# TEST 5: VERIFY PIN corect (01 02 03 04)
+/output Test 5: VERIFY PIN corect
+80 20 00 00 04 01 02 03 04
+/check SW 9000
+/output -> PIN verificat OK
+
+# ---------------------------------------------------------------------------
+# TEST 6: CREDIT 100 RON
+/output Test 6: CREDIT 100 RON
+80 30 00 00 01 64
+/check SW 9000
+/output -> Credit 100 RON OK
+
+# ---------------------------------------------------------------------------
+# TEST 7: GET_BALANCE => 100 RON
+/output Test 7: GET_BALANCE dupa credit
+80 50 00 00 04
+/check SW 9000
+/check Rsp 00640000
+/output -> Balance=100 RON, SubType=0, Trips=0
+
+# ---------------------------------------------------------------------------
+# TEST 8: DEBIT - calatorie bus fara abonament, zi lucrativa ora 14 (pret normal 4 RON)
+#   P1=01(bus) P2=01(1 persoana) DATA=03(miercuri) 0E(14h)
+/output Test 8: DEBIT bus normal (miercuri 14:00, 4 RON)
+80 40 01 01 02 03 0E
+/check SW 9000
+/output -> Debit 4 RON OK
+
+# TEST 8b: Verificare sold => 96 RON
+80 50 00 00 04
+/check SW 9000
+/check Rsp 00600000
+/output -> Balance=96 RON
+
+# ---------------------------------------------------------------------------
+# TEST 9: DEBIT - calatorie tram fara abonament, zi lucrativa ora 14 (pret normal 2 RON)
+#   P1=02(tram) P2=01(1 persoana) DATA=02(marti) 0E(14h)
+/output Test 9: DEBIT tram normal (marti 14:00, 2 RON)
+80 40 02 01 02 02 0E
+/check SW 9000
+/output -> Debit 2 RON OK
+
+# Sold => 94 RON
+80 50 00 00 04
+/check SW 9000
+/check Rsp 005E0000
+/output -> Balance=94 RON
+
+# ---------------------------------------------------------------------------
+# TEST 10: DEBIT - reducere weekday bus, luni 10:30 (3 RON)
+#   P1=01(bus) P2=01 DATA=01(luni) 0A(10h)
+/output Test 10: DEBIT bus reducere weekday (luni 10:00, 3 RON)
+80 40 01 01 02 01 0A
+/check SW 9000
+/output -> Debit 3 RON OK
+
+# Sold => 91 RON
+80 50 00 00 04
+/check SW 9000
+/check Rsp 005B0000
+/output -> Balance=91 RON
+
+# ---------------------------------------------------------------------------
+# TEST 11: DEBIT - reducere weekday tram, vineri 11:00 (1 RON)
+#   P1=02(tram) P2=01 DATA=05(vineri) 0B(11h)
+/output Test 11: DEBIT tram reducere weekday (vineri 11:00, 1 RON)
+80 40 02 01 02 05 0B
+/check SW 9000
+/output -> Debit 1 RON OK
+
+# Sold => 90 RON
+80 50 00 00 04
+/check SW 9000
+/check Rsp 005A0000
+/output -> Balance=90 RON
+
+# ---------------------------------------------------------------------------
+# TEST 12: DEBIT - weekend bus (jumatate pret = 2 RON), sambata 15:00
+#   P1=01(bus) P2=01 DATA=06(sambata) 0F(15h)
+/output Test 12: DEBIT bus weekend (sambata 15:00, 2 RON)
+80 40 01 01 02 06 0F
+/check SW 9000
+/output -> Debit 2 RON OK
+
+# Sold => 88 RON
+80 50 00 00 04
+/check SW 9000
+/check Rsp 00580000
+/output -> Balance=88 RON
+
+# ---------------------------------------------------------------------------
+# TEST 13: DEBIT - weekend tram (jumatate pret = 1 RON), duminica 12:00
+#   P1=02(tram) P2=01 DATA=07(duminica) 0C(12h)
+/output Test 13: DEBIT tram weekend (duminica 12:00, 1 RON)
+80 40 02 01 02 07 0C
+/check SW 9000
+/output -> Debit 1 RON OK
+
+# Sold => 87 RON
+80 50 00 00 04
+/check SW 9000
+/check Rsp 00570000
+/output -> Balance=87 RON
+
+# ---------------------------------------------------------------------------
+# TEST 14: PASS - cumparare abonament bus 20 calatorii (60 RON)
+#   P1=01(bus20) P2=03(miercuri)
+/output Test 14: Cumparare abonament bus 20 trips (60 RON)
+80 70 01 03
+/check SW 9000
+/output -> Abonament bus cumparat OK
+
+# Sold => 27 RON, SubType=01, Trips=20
+80 50 00 00 04
+/check SW 9000
+/check Rsp 001B0114
+/output -> Balance=27 RON, SubType=01 (bus), Trips=20
+
+# ---------------------------------------------------------------------------
+# TEST 15: DEBIT cu abonament bus activ - consuma trip (fara scadere RON)
+#   P1=01(bus) P2=01 DATA=03(miercuri) 0E(14h)
+/output Test 15: DEBIT bus cu abonament activ (trip consumat, 0 RON scazut)
+80 40 01 01 02 03 0E
+/check SW 9000
+/output -> Trip consumat din abonament
+
+# Sold => 27 RON, SubType=01, Trips=19
+80 50 00 00 04
+/check SW 9000
+/check Rsp 001B0113
+/output -> Balance=27 RON, Trips=19
+
+# ---------------------------------------------------------------------------
+# TEST 16: DEBIT tram cu abonament BUS activ - NU foloseste abonamentul => plateste RON
+#   P1=02(tram) P2=01 DATA=03(miercuri) 0E(14h) => 2 RON
+/output Test 16: DEBIT tram cu abonament BUS (incompatibil, plateste 2 RON)
+80 40 02 01 02 03 0E
+/check SW 9000
+/output -> Platit 2 RON pentru tram (abonament bus nu acopera)
+
+# Sold => 25 RON, Trips=19
+80 50 00 00 04
+/check SW 9000
+/check Rsp 00190113
+/output -> Balance=25 RON, Trips=19
+
+# ---------------------------------------------------------------------------
+# TEST 17: PASS - cumparare abonament daily pass (10 RON)
+#   P1=03(daily) P2=04(joi)
+/output Test 17: Cumparare daily pass (10 RON)
+80 70 03 04
+/check SW 9000
+/output -> Daily pass cumparat OK
+
+# Sold => 15 RON, SubType=03, Trips=FF(daily activ)
+80 50 00 00 04
+/check SW 9000
+/check Rsp 000F03FF
+/output -> Balance=15 RON, SubType=03 (daily), Trips=FF (activ)
+
+# ---------------------------------------------------------------------------
+# TEST 18: DEBIT bus cu daily pass activ (aceeasi zi=joi) => gratis
+#   P1=01(bus) P2=01 DATA=04(joi) 0E(14h)
+/output Test 18: DEBIT bus cu daily pass activ (joi, aceeasi zi, 0 RON)
+80 40 01 01 02 04 0E
+/check SW 9000
+/output -> Calatorie gratuita cu daily pass
+
+# Sold ramas 15 RON
+80 50 00 00 04
+/check SW 9000
+/check Rsp 000F03FF
+/output -> Balance=15 RON (neschimbat)
+
+# ---------------------------------------------------------------------------
+# TEST 19: DEBIT tram cu daily pass activ (aceeasi zi) => gratis
+#   P1=02(tram) P2=01 DATA=04(joi) 0A(10h)
+/output Test 19: DEBIT tram cu daily pass activ (joi, 0 RON)
+80 40 02 01 02 04 0A
+/check SW 9000
+/output -> Calatorie gratuita cu daily pass
+
+# ---------------------------------------------------------------------------
+# TEST 20: Cumparare bilete grup - 5 persoane, bus, luni ora 14 (pret normal 4 RON)
+#   Calator propriu: fara abonament => plateste bilet
+#   4 persoane extra * 4 RON = 16 RON
+#   Calator propriu: 4 RON
+#   Total: 20 RON
+#   Sub 10 persoane => fara reducere grup
+/output Test 20: CREDIT 50 RON pentru teste grup
+80 20 00 00 04 01 02 03 04
+/check SW 9000
+80 30 00 00 01 32
+/check SW 9000
+
+/output Test 20: DEBIT grup 5 persoane bus (luni 14:00, total 20 RON)
+80 40 01 05 02 01 0E
+/check SW 9000
+/output -> Grup 5 persoane bus: 20 RON
+
+# ---------------------------------------------------------------------------
+# TEST 21: Cumparare bilete grup - 15 persoane, tram, miercuri ora 14 (pret 2 RON)
+#   Calator propriu: 2 RON
+#   14 persoane extra: 14 * 2 = 28 RON
+#   Total brut: 30 RON
+#   Grup > 10 persoane => -20%: 30 * 0.80 = 24 RON
+/output Test 21: DEBIT grup 15 persoane tram (miercuri 14:00, 24 RON cu reducere grup)
+80 40 02 0F 02 03 0E
+/check SW 9000
+/output -> Grup 15 persoane tram: 24 RON (reducere 20%)
+
+# ---------------------------------------------------------------------------
+# TEST 22: DEBIT cu sold insuficient => 6A85
+/output Test 22: DEBIT bus cu sold insuficient (asteptat 6A85)
+# Golim soldul mai intai printr-o serie de debite
+# Presupunem sold ramas mic, incercam debit mare
+80 40 01 14 02 03 0E
+/check SW 6A85
+/output -> Corect: sold insuficient
+
+# ---------------------------------------------------------------------------
+# TEST 23: PASS cu sold insuficient => 6A85
+/output Test 23: PASS abonament cu sold insuficient (asteptat 6A85)
+80 70 01 01
+/check SW 6A85
+/output -> Corect: sold insuficient pentru abonament
+
+# ---------------------------------------------------------------------------
+# TEST 24: PASS cu tip invalid => 6A86
+/output Test 24: PASS tip abonament invalid (asteptat 6A86)
+80 70 FF 01
+/check SW 6A86
+/output -> Corect: tip abonament invalid
+
+# ---------------------------------------------------------------------------
+# TEST 25: DEBIT numar persoane invalid (>20) => 6A88
+/output Test 25: DEBIT cu 21 persoane (asteptat 6A88)
+80 40 01 15 02 03 0E
+/check SW 6A88
+/output -> Corect: prea multe persoane
+
+# ---------------------------------------------------------------------------
+# TEST 26: Blocare PIN (3 incercari gresite)
+/output Test 26: Blocare PIN dupa 3 incercari gresite
+80 20 00 00 04 FF FF FF FF
+/check SW 6300
+80 20 00 00 04 FF FF FF FF
+/check SW 6300
+80 20 00 00 04 FF FF FF FF
+/check SW 6300
+/output -> PIN blocat dupa 3 incercari
+
+# Verificare: PIN blocat => 6982
+80 20 00 00 04 01 02 03 04
+/check SW 6982
+/output -> Corect: PIN blocat (6982)
+
+# ---------------------------------------------------------------------------
+# TEST 27: RESET PIN cu PUK gresit => 6300
+/output Test 27: RESET PIN cu PUK gresit (asteptat 6300)
+80 2C 00 00 08 01 02 03 04 05 06 07 08
+/check SW 6300
+/output -> Corect: PUK gresit
+
+# ---------------------------------------------------------------------------
+# TEST 28: RESET PIN cu PUK corect (09*8) => deblocare
+/output Test 28: RESET PIN cu PUK corect
+80 2C 00 00 08 09 09 09 09 09 09 09 09
+/check SW 9000
+/output -> PIN deblocat OK
+
+# Verificam ca putem face VERIFY din nou
+80 20 00 00 04 01 02 03 04
+/check SW 9000
+/output -> VERIFY dupa deblocare OK
+
+# ---------------------------------------------------------------------------
+# TEST 29: INS necunoscut => 6D00
+/output Test 29: INS necunoscut (asteptat 6D00)
+80 99 00 00
+/check SW 6D00
+/output -> Corect: INS nesuportat
+
+# ---------------------------------------------------------------------------
+# TEST 30: DEBIT weekend tram reducere - grup 12 persoane
+#   Duminica 15:00, tram, pret weekend = 1 RON/pers
+#   Calator: 1 RON, 11 extra: 11 RON, total=12 RON
+#   > 10 persoane => -20%: 12 * 0.80 = ~9 RON (integer)
+/output Test 30: CREDIT 50 RON
+80 20 00 00 04 01 02 03 04
+/check SW 9000
+80 30 00 00 01 32
+/check SW 9000
+
+/output Test 30: DEBIT grup 12 persoane tram weekend (duminica 15:00, reducere grup 20%)
+80 40 02 0C 02 07 0F
+/check SW 9000
+/output -> Grup 12 persoane tram weekend: ~9 RON (12*1=12, -20%=9)
+/output ===== Toate testele finalizate =====
